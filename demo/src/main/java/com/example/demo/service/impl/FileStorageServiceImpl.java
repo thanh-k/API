@@ -1,44 +1,50 @@
+// src/main/java/com/example/demo/service/impl/FileStorageServiceImpl.java
 package com.example.demo.service.impl;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import jakarta.annotation.PostConstruct;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.UUID;
 
 @Service
 public class FileStorageServiceImpl {
 
-    // Trỏ đến thư mục "uploads" mà bạn vừa tạo
-    private final Path root = Paths.get("uploads");
+    private final Path root = Paths.get("uploads").toAbsolutePath().normalize();
 
-    // Hàm này sẽ được tự động gọi khi ứng dụng khởi động
     @PostConstruct
     public void init() {
         try {
-            // Tạo thư mục "uploads" nếu nó chưa tồn tại
             Files.createDirectories(root);
         } catch (IOException e) {
-            throw new RuntimeException("Could not initialize folder for upload!");
+            throw new RuntimeException("Could not initialize folder for upload!", e);
         }
     }
 
+    /** Lưu file và trả về TÊN FILE đã lưu (không kèm đường dẫn) */
     public String save(MultipartFile file) {
         try {
-            // Tạo một tên file duy nhất để tránh trùng lặp
-            String originalFilename = file.getOriginalFilename();
-            String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            String uniqueFilename = UUID.randomUUID().toString() + extension;
+            if (file == null || file.isEmpty()) throw new IOException("Empty file");
 
-            // Copy file vào thư mục "uploads"
-            Files.copy(file.getInputStream(), this.root.resolve(uniqueFilename));
+            String original = file.getOriginalFilename();
+            String ext = "";
+            if (original != null) {
+                int dot = original.lastIndexOf('.');
+                if (dot >= 0) ext = original.substring(dot); // ".jpg" | ".png" | ""
+            }
 
-            return uniqueFilename; // Trả về tên file duy nhất đã lưu
+            String unique = UUID.randomUUID().toString().replace("-", "") + ext;
+
+            Files.copy(
+                file.getInputStream(),
+                this.root.resolve(unique),
+                StandardCopyOption.REPLACE_EXISTING
+            );
+            return unique;
         } catch (Exception e) {
-            throw new RuntimeException("Could not store the file. Error: " + e.getMessage());
+            throw new RuntimeException("Could not store the file. Error: " + e.getMessage(), e);
         }
     }
 }

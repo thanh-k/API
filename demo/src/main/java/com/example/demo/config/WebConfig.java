@@ -1,27 +1,27 @@
 package com.example.demo.config;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry; // Import mới
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
+
+import java.util.List;
 
 @Configuration
-public class WebConfig implements WebMvcConfigurer {
+public class WebConfig {
 
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:3000")
-                .allowedMethods("GET", "POST", "PUT", "DELETE")
-                .allowedHeaders("*")
-                .allowCredentials(true);
-    }
+  @Bean  // <-- bean tên "corsFilter" và đúng kiểu CorsFilter
+  public CorsFilter corsFilter() {
+    CorsConfiguration cfg = new CorsConfiguration();
+    cfg.setAllowedOriginPatterns(List.of("http://localhost:3000","http://127.0.0.1:3000"));
+    cfg.setAllowCredentials(true);
+    cfg.setAllowedHeaders(List.of("*"));
+    cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+    cfg.setExposedHeaders(List.of("Authorization","Location","Content-Disposition","Set-Cookie"));
 
-    // --- THÊM PHƯƠNG THỨC NÀY ---
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Khi có yêu cầu tới /files/**, Spring Boot sẽ tìm file trong thư mục "uploads/"
-        registry.addResourceHandler("/files/**")
-                .addResourceLocations("file:./uploads/");
-    }
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", cfg);
+    return new CorsFilter(source);
+  }
 }
