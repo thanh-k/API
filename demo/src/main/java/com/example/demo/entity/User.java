@@ -4,50 +4,51 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
 @Table(name = "users")
+@Getter @Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class User {
 
-  public enum Role { ADMIN, STAFF, USER }
+    public enum Role {
+        ADMIN, STAFF, USER
+    }
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-  @Column(nullable = false)
-  private String name;
+    private String name;
 
-  @Column(nullable = false, unique = true)
-  private String email;
+    @Column(unique = true, nullable = false)
+    private String email;
 
-  private String phone;
-  private String address;
+    @Column(unique = true)
+    private String phone;
 
-  @Column(nullable = false)
-  private String password;
+    private String address;
 
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false)
-  private Role role;
+    private String password;
 
-  // ✅ Ảnh đại diện (URL)
-  @Column(name = "avatar_url")
-  private String avatarUrl;
+    @Enumerated(EnumType.STRING)
+    private Role role;
 
-  @Column(name="created_at") private Instant createdAt;
-  @Column(name="updated_at") private Instant updatedAt;
+    private String avatarUrl;
 
-  @PrePersist
-  public void prePersist() {
-    Instant now = Instant.now();
-    createdAt = now;
-    updatedAt = now;
-  }
+    private Instant createdAt;
+    private Instant updatedAt;
 
-  @PreUpdate
-  public void preUpdate() {
-    updatedAt = Instant.now();
-  }
+    @PrePersist
+    public void prePersist() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = Instant.now();
+    }
 }

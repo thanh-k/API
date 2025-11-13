@@ -23,76 +23,93 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @EnableMethodSecurity // bật @PreAuthorize
 public class SecurityConfig {
 
-  private final JwtAuthenticationFilter jwtFilter;
+    private final JwtAuthenticationFilter jwtFilter;
 
-  public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
-    this.jwtFilter = jwtFilter;
-  }
+    public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
+        this.jwtFilter = jwtFilter;
+    }
 
-  @Bean
-  public SecurityFilterChain chain(org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
-    http
-      .cors(withDefaults())
-      .csrf(csrf -> csrf.disable()) // dùng JWT -> disable CSRF cho API
-      .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-      .exceptionHandling(eh -> eh
-        .authenticationEntryPoint((req, res, ex) -> {
-          res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-          res.setContentType("application/json");
-          res.getWriter().write("{\"error\":\"Unauthorized\"}");
-        })
-        .accessDeniedHandler((req, res, ex) -> {
-          res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-          res.setContentType("application/json");
-          res.getWriter().write("{\"error\":\"Forbidden\"}");
-        })
-      )
-      .authorizeHttpRequests(auth -> auth
-        // Files (upload & serve ảnh)
-        .requestMatchers(HttpMethod.POST, "/files/upload").permitAll()
-        .requestMatchers(HttpMethod.GET,  "/files/**").permitAll()
+    @Bean
+    public SecurityFilterChain chain(org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
+        http
+            .cors(withDefaults())
+            .csrf(csrf -> csrf.disable()) // dùng JWT -> disable CSRF cho API
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // ✅ Header chống cache cho các endpoint bảo vệ
+            .headers(h -> h.cacheControl(withDefaults()))
+            .exceptionHandling(eh -> eh
+                .authenticationEntryPoint((req, res, ex) -> {
+                    res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    res.setContentType("application/json");
+                    res.getWriter().write("{\"error\":\"Unauthorized\"}");
+                })
+                .accessDeniedHandler((req, res, ex) -> {
+                    res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    res.setContentType("application/json");
+                    res.getWriter().write("{\"error\":\"Forbidden\"}");
+                })
+            )
+            .authorizeHttpRequests(auth -> auth
 
-        // Auth
-        .requestMatchers("/auth/**").permitAll()
+                // ===== Cho phép preflight CORS =====
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-        // Cho phép GET public cho dữ liệu đọc (USER/STAFF/ADMIN đều xem được)
-        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**").permitAll()
+                // ===== Files (upload & serve ảnh) =====
+                .requestMatchers(HttpMethod.POST, "/files/upload").permitAll()
+                .requestMatchers(HttpMethod.GET,  "/files/**").permitAll()
 
-        // Khu admin: ADMIN & STAFF đều vào trang admin, nhưng quyền ghi sẽ do @PreAuthorize chặn
-        .requestMatchers("/admin/**", "/api/admin/**").hasAnyRole("ADMIN","STAFF")
+                // ===== Auth public: login / register / forgot password =====
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/auth/login",
+                    "/auth/register",
+                    "/auth/forgot/check",
+                    "/auth/forgot/reset"
+                ).permitAll()
 
-        // Còn lại yêu cầu authenticated
-        .anyRequest().authenticated()
-      )
-      .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+                // ===== Các endpoint auth cần đăng nhập =====
+                .requestMatchers(HttpMethod.GET,  "/auth/me").authenticated()
+                .requestMatchers(HttpMethod.PUT,  "/auth/profile").authenticated()
+                .requestMatchers(HttpMethod.POST, "/auth/change-password").authenticated()
 
-    return http.build();
-  }
+                // ===== Public GET cho dữ liệu sản phẩm & danh mục =====
+                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**").permitAll()
 
-  // CORS cho FE dev
-  @Bean
-  public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration cfg = new CorsConfiguration();
-    // Dùng allowedOriginPatterns để không lỗi khi origin có port
-    cfg.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
-    cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    cfg.setAllowedHeaders(List.of("*"));
-    cfg.setExposedHeaders(List.of("Set-Cookie"));
-    cfg.setAllowCredentials(true);
-    cfg.setMaxAge(3600L);
+                // ===== Khu admin: ADMIN & STAFF đều vào được (quản lý user, sản phẩm, ...) =====
+                .requestMatchers("/admin/**", "/api/admin/**").hasAnyRole("ADMIN", "STAFF")
 
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", cfg);
-    return source;
-  }
+                // ===== Còn lại yêu cầu authenticated =====
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
-  @Bean
-  public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-  }
+        return http.build();
+    }
 
-  @Bean
-  public AuthenticationManager authenticationManager(AuthenticationConfiguration c) throws Exception {
-    return c.getAuthenticationManager();
-  }
+    // CORS cho FE dev
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cfg = new CorsConfiguration();
+        // Dùng allowedOriginPatterns để không lỗi khi origin có port
+        cfg.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setExposedHeaders(List.of("Set-Cookie"));
+        cfg.setAllowCredentials(true);
+        cfg.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cfg);
+        return source;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration c) throws Exception {
+        return c.getAuthenticationManager();
+    }
 }

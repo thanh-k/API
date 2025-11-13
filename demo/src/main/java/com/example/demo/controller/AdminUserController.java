@@ -1,69 +1,195 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.CreateUserRequest;
-import com.example.demo.dto.UpdateUserRequest;
+import com.example.demo.dto.AdminUserRequest;
 import com.example.demo.dto.UserDto;
 import com.example.demo.entity.User;
 import com.example.demo.repository.UserRepository;
-import org.springframework.data.domain.*;
+import com.example.demo.util.ValidationUtil;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
+
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin/users")
+@RequiredArgsConstructor
 public class AdminUserController {
-  private final UserRepository userRepo; private final PasswordEncoder encoder;
-  public AdminUserController(UserRepository r, PasswordEncoder e){ this.userRepo=r; this.encoder=e; }
 
-  @GetMapping
-  @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-  public ResponseEntity<?> list(@RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="10") int size){
-    Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-    Page<User> p = userRepo.findAll(pageable);
-    return ResponseEntity.ok(p.map(this::toDto));
-  }
+    private final UserRepository userRepo;
+    private final PasswordEncoder encoder;
 
-  @GetMapping("/<built-in function id>")
-  @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-  public ResponseEntity<?> get(@PathVariable Long id){
-    var u = userRepo.findById(id).orElse(null);
-    if (u==null) return ResponseEntity.status(404).body(Map.of("error","User not found"));
-    return ResponseEntity.ok(toDto(u));
-  }
+    private ResponseEntity<?> bad(String msg) {
+        return ResponseEntity.badRequest().body(Map.of("error", msg));
+    }
 
-  @PostMapping
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<?> create(@Valid @RequestBody CreateUserRequest req){
-    if (userRepo.existsByEmail(req.getEmail())) return ResponseEntity.badRequest().body(Map.of("error","Email already in use"));
-    var u = User.builder().name(req.getName()).phone(req.getPhone()).email(req.getEmail()).address(req.getAddress()).password(encoder.encode(req.getPassword())).role(User.Role.valueOf(req.getRole().toUpperCase())).build();
-    userRepo.save(u);
-    return ResponseEntity.ok(toDto(u));
-  }
+    /* ===== helper: Entity -> DTO ===== */
+    private UserDto toDto(User u) {
+        return UserDto.builder()
+                .id(u.getId())
+                .name(u.getName())
+                .email(u.getEmail())
+                .phone(u.getPhone())
+                .address(u.getAddress())
+                .role(u.getRole() != null ? u.getRole().name() : null)
+                .avatarUrl(u.getAvatarUrl())
+                .createdAt(u.getCreatedAt())
+                .updatedAt(u.getUpdatedAt())
+                .build();
+    }
 
-  @PutMapping("/<built-in function id>")
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest req){
-    var u = userRepo.findById(id).orElse(null);
-    if (u==null) return ResponseEntity.status(404).body(Map.of("error","User not found"));
-    if (!u.getEmail().equals(req.getEmail()) && userRepo.existsByEmail(req.getEmail())) return ResponseEntity.badRequest().body(Map.of("error","Email already in use"));
-    u.setName(req.getName()); u.setPhone(req.getPhone()); u.setEmail(req.getEmail()); u.setAddress(req.getAddress());
-    if (req.getPassword()!=null && !req.getPassword().isBlank()) u.setPassword(encoder.encode(req.getPassword()));
-    u.setRole(User.Role.valueOf(req.getRole().toUpperCase())); userRepo.save(u);
-    return ResponseEntity.ok(toDto(u));
-  }
+    /* ===== READ all ===== */
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<UserDto> listAll() {
+        return userRepo.findAll()
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
 
-  @DeleteMapping("/<built-in function id>")
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<?> delete(@PathVariable Long id){
-    if (!userRepo.existsById(id)) return ResponseEntity.status(404).body(Map.of("error","User not found"));
-    userRepo.deleteById(id); return ResponseEntity.noContent().build();
-  }
+    /* ===== READ by id ===== */
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getById(@PathVariable Long id) {
+        Optional<User> opt = userRepo.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "User không tồn tại"));
+        }
+        return ResponseEntity.ok(toDto(opt.get()));
+    }
 
-  private UserDto toDto(User u){
-    return new UserDto(u.getId(), u.getName(), u.getPhone(), u.getEmail(), u.getAddress(), u.getRole().name(), u.getCreatedAt(), u.getUpdatedAt());
-  }
+    /* ===== CREATE ===== */
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> create(@RequestBody AdminUserRequest req) {
+
+        // Email + password bắt buộc
+        if (req.getEmail() == null || req.getEmail().isBlank()
+                || req.getPassword() == null || req.getPassword().isBlank()) {
+            return bad("Email và mật khẩu là bắt buộc");
+        }
+
+        // Validate email format
+        if (!ValidationUtil.isValidEmail(req.getEmail())) {
+            return bad("Email không hợp lệ (ví dụ: ten@domain.com)");
+        }
+
+        // Validate phone format nếu có
+        if (req.getPhone() != null && !req.getPhone().isBlank()
+                && !ValidationUtil.isValidPhone(req.getPhone())) {
+            return bad("Số điện thoại không hợp lệ (phải gồm 10 chữ số và bắt đầu bằng 0)");
+        }
+
+        // Password length
+        if (!ValidationUtil.isValidPassword(req.getPassword())) {
+            return bad("Mật khẩu phải có ít nhất 6 ký tự");
+        }
+
+        // trùng email
+        if (userRepo.existsByEmail(req.getEmail())) {
+            return bad("Email đã được sử dụng bởi tài khoản khác");
+        }
+
+        // trùng phone
+        if (req.getPhone() != null && !req.getPhone().isBlank()
+                && userRepo.existsByPhone(req.getPhone())) {
+            return bad("Số điện thoại đã được sử dụng bởi tài khoản khác");
+        }
+
+        User u = User.builder()
+                .name(req.getName())
+                .email(req.getEmail())
+                .phone(req.getPhone())
+                .address(req.getAddress())
+                .avatarUrl(req.getAvatarUrl())
+                .password(encoder.encode(req.getPassword()))
+                .role(req.getRole() != null ? req.getRole() : User.Role.USER)
+                .build();
+
+        userRepo.save(u);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDto(u));
+    }
+
+    /* ===== UPDATE ===== */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @RequestBody AdminUserRequest req) {
+
+        Optional<User> opt = userRepo.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "User không tồn tại"));
+        }
+        User u = opt.get();
+
+        // ==== EMAIL ====
+        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            if (!ValidationUtil.isValidEmail(req.getEmail())) {
+                return bad("Email không hợp lệ (ví dụ: ten@domain.com)");
+            }
+            if (!req.getEmail().equalsIgnoreCase(u.getEmail())
+                    && userRepo.existsByEmail(req.getEmail())) {
+                return bad("Email đã được sử dụng bởi tài khoản khác");
+            }
+            u.setEmail(req.getEmail());
+        }
+
+        // ==== PHONE ====
+        if (req.getPhone() != null && !req.getPhone().isBlank()) {
+            if (!ValidationUtil.isValidPhone(req.getPhone())) {
+                return bad("Số điện thoại không hợp lệ (phải gồm 10 chữ số và bắt đầu bằng 0)");
+            }
+            if (!req.getPhone().equals(u.getPhone())
+                    && userRepo.existsByPhone(req.getPhone())) {
+                return bad("Số điện thoại đã được sử dụng bởi tài khoản khác");
+            }
+            u.setPhone(req.getPhone());
+        }
+
+        // ==== PASSWORD (tùy chọn) ====
+        if (req.getPassword() != null && !req.getPassword().isBlank()) {
+            if (!ValidationUtil.isValidPassword(req.getPassword())) {
+                return bad("Mật khẩu mới phải có ít nhất 6 ký tự");
+            }
+            u.setPassword(encoder.encode(req.getPassword()));
+        }
+
+        // ==== field khác ====
+        if (req.getName() != null)       u.setName(req.getName());
+        if (req.getAddress() != null)    u.setAddress(req.getAddress());
+        if (req.getAvatarUrl() != null)  u.setAvatarUrl(req.getAvatarUrl());
+        if (req.getRole() != null)       u.setRole(req.getRole());
+
+        userRepo.save(u);
+        return ResponseEntity.ok(toDto(u));
+    }
+
+    /* ===== DELETE ===== */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+        Optional<User> opt = userRepo.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "User không tồn tại"));
+        }
+
+        try {
+            userRepo.deleteById(id);
+            return ResponseEntity.ok(Map.of("message", "Đã xoá user thành công"));
+        } catch (DataIntegrityViolationException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "Không thể xoá vì user đang được sử dụng ở dữ liệu khác"));
+        }
+    }
 }

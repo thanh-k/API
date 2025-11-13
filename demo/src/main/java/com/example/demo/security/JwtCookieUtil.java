@@ -16,16 +16,17 @@ public final class JwtCookieUtil {
 
     private JwtCookieUtil() {}
 
-    /** 
+    /**
      * Ghi JWT vào cookie HttpOnly để FE không truy cập bằng JS.
-     * @param secure dev (HTTP) = false, prod (HTTPS) = true
+     *
+     * @param secure        dev (HTTP) = false, prod (HTTPS) = true
      * @param maxAgeSeconds thời gian sống (giây)
      */
     public static void writeJwt(HttpServletResponse res, String token, boolean secure, int maxAgeSeconds) {
         ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, token)
                 .httpOnly(true)
-                .secure(false)        // ✅ localhost (HTTP): false
-                .sameSite("Lax")      // ✅ Cho phép gửi cookie trong request cùng domain (React + Spring)
+                .secure(secure)      // dùng tham số để sau này chạy HTTPS thì truyền true
+                .sameSite("Lax")     // Cho phép gửi cookie trong request cùng domain (React + Spring)
                 .path(COOKIE_PATH)
                 .maxAge(maxAgeSeconds)
                 .build();
@@ -36,7 +37,7 @@ public final class JwtCookieUtil {
     public static void clear(HttpServletResponse res, boolean secure) {
         ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(secure)
                 .sameSite("Lax")
                 .path(COOKIE_PATH)
                 .maxAge(0)
