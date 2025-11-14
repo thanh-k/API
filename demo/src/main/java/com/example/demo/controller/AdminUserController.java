@@ -2,11 +2,13 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.AdminUserRequest;
 import com.example.demo.dto.UserDto;
+import com.example.demo.entity.Order;
 import com.example.demo.entity.User;
+import com.example.demo.repository.OrderDetailRepository;
+import com.example.demo.repository.OrderRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.util.ValidationUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +27,8 @@ public class AdminUserController {
 
     private final UserRepository userRepo;
     private final PasswordEncoder encoder;
+    private final OrderRepository orderRepo;
+    private final OrderDetailRepository orderDetailRepo;
 
     private ResponseEntity<?> bad(String msg) {
         return ResponseEntity.badRequest().body(Map.of("error", msg));
@@ -174,22 +178,57 @@ public class AdminUserController {
         return ResponseEntity.ok(toDto(u));
     }
 
-    /* ===== DELETE ===== */
+    /* ===== DELETE (có xử lý đơn hàng) ===== */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> deleteUser(
+            @PathVariable Long id,
+            @RequestParam(name = "force", required = false, defaultValue = "false") boolean forceDelete,
+            @RequestParam(name = "removeOrders", required = false, defaultValue = "false") boolean removeOrders
+    ) {
         Optional<User> opt = userRepo.findById(id);
         if (opt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "User không tồn tại"));
         }
 
-        try {
-            userRepo.deleteById(id);
-            return ResponseEntity.ok(Map.of("message", "Đã xoá user thành công"));
-        } catch (DataIntegrityViolationException ex) {
+        User user = opt.get();
+
+        long orderCount = orderRepo.countByUserId(id);
+
+        // Trường hợp có đơn hàng nhưng FE không gửi force
+        if (orderCount > 0 && !forceDelete) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "Không thể xoá vì user đang được sử dụng ở dữ liệu khác"));
+                    .body(Map.of(
+                            "error", "USER_HAS_ORDERS",
+                            "message", "User đã có đơn hàng, không thể xóa trực tiếp.",
+                            "orderCount", orderCount,
+                            "hasOrders", true 
+                    ));
+        }
+
+        // FORCE DELETE: xóa user + toàn bộ đơn hàng
+        if (forceDelete) {
+            List<Order> orders = orderRepo.findByUserId(id);
+            orders.forEach(o ->
+                    orderDetailRepo.deleteAll(orderDetailRepo.findByOrderId(o.getId()))
+            );
+            orderRepo.deleteAll(orders);
+
+            userRepo.delete(user);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Đã xóa user và toàn bộ đơn hàng.",
+                    "orderDeleted", orders.size()
+            ));
+        }
+
+        // Trường hợp không có đơn → xóa bình thường
+        try {
+            userRepo.delete(user);
+            return ResponseEntity.ok(Map.of("message", "Đã xoá user thành công."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Không thể xoá user."));
         }
     }
 }
