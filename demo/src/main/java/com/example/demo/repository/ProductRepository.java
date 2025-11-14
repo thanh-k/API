@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import com.example.demo.entity.Brand;
 import com.example.demo.entity.Product;
 
 public interface ProductRepository extends JpaRepository<Product, Integer> {
@@ -11,4 +12,11 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     List<Product> findByNameContainingIgnoreCase(String keyword);
     List<Product> findByPriceBetween(Double min, Double max);
     List<Product> findByQuantityGreaterThan(Integer q);
+
+    //
+    List<Product> findByBrand(Brand brand);
+    
+    boolean existsByBrandId(Integer brandId);
+    boolean existsByCategoryId(Integer categoryId);
+
 }

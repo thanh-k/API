@@ -2,8 +2,11 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.ProductDto;
 import com.example.demo.entity.Product;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.entity.Brand;
 import com.example.demo.entity.Category;
 import com.example.demo.repository.ProductRepository;
+import com.example.demo.repository.BrandRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.service.ProductService;
 
@@ -14,14 +17,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
 
+    // CHỈ KHAI BÁO 1 ProductRepository (mình gọi là repo)
     private final ProductRepository repo;
-    private final CategoryRepository categoryRepo; // nếu bạn không dùng category, có thể xoá field này
+    private final CategoryRepository categoryRepo; // bạn đang dùng tên này trong code
+    private final BrandRepository brandRepository;
 
     /* ========== CRUD ========== */
 
@@ -34,6 +40,14 @@ public class ProductServiceImpl implements ProductService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category not found"));
             e.setCategory(c);
         }
+
+        // gán brand nếu có
+        if (dto.getBrandId() != null) {
+            Brand b = brandRepository.findById(dto.getBrandId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Brand not found"));
+            e.setBrand(b);
+        }
+
         e = repo.save(e);
         return toDto(e);
     }
@@ -41,15 +55,15 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public List<ProductDto> getAllProducts() {
-        return repo.findAll().stream().map(this::toDto).toList();
+        return repo.findAll().stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public ProductDto getProductById(Integer id) {
-    var p = repo.findById(id)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
-    return toDto(p);
+        var p = repo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+        return toDto(p);
     }
 
     @Override
@@ -72,6 +86,14 @@ public class ProductServiceImpl implements ProductService {
             p.setCategory(null);
         }
 
+        if (dto.getBrandId() != null) {
+            Brand b = brandRepository.findById(dto.getBrandId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Brand not found"));
+            p.setBrand(b);
+        } else {
+            p.setBrand(null);
+        }
+
         p = repo.save(p);
         return toDto(p);
     }
@@ -89,19 +111,19 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public List<ProductDto> searchByName(String keyword) {
-        return repo.findByNameContainingIgnoreCase(keyword).stream().map(this::toDto).toList();
+        return repo.findByNameContainingIgnoreCase(keyword).stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ProductDto> searchByPriceRange(Double min, Double max) {
-        return repo.findByPriceBetween(min, max).stream().map(this::toDto).toList();
+        return repo.findByPriceBetween(min, max).stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ProductDto> searchByQuantityGreaterThan(Integer q) {
-        return repo.findByQuantityGreaterThan(q).stream().map(this::toDto).toList();
+        return repo.findByQuantityGreaterThan(q).stream().map(this::toDto).collect(Collectors.toList());
     }
 
     /* ========== MAPPER ========== */
@@ -119,6 +141,13 @@ public class ProductServiceImpl implements ProductService {
             dto.setCategoryId(e.getCategory().getId());
             dto.setCategoryName(e.getCategory().getName()); // nếu ProductDto có field này
         }
+
+        if (e.getBrand() != null) {
+            dto.setBrandId(e.getBrand().getId());
+            dto.setBrandName(e.getBrand().getName());
+            dto.setBrandSlug(e.getBrand().getSlug());
+        }
+
         return dto;
     }
 
@@ -132,4 +161,17 @@ public class ProductServiceImpl implements ProductService {
         e.setImageUrl(dto.getImageUrl());
         return e;
     }
+
+    // Lọc theo brand slug
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductsByBrandSlug(String brandSlug) {
+        Brand brand = brandRepository.findBySlug(brandSlug)
+                .orElseThrow(() -> new ResourceNotFoundException("Brand not found: " + brandSlug));
+
+        return repo.findByBrand(brand)
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
 }

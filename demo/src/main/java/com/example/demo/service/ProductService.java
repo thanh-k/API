@@ -14,4 +14,7 @@ public interface ProductService {
     List<ProductDto> searchByName(String keyword);
     List<ProductDto> searchByPriceRange(Double min, Double max);
     List<ProductDto> searchByQuantityGreaterThan(Integer q);
+
+    // brand
+    List<ProductDto> getProductsByBrandSlug(String brandSlug);
 }

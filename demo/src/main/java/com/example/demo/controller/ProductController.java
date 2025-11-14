@@ -18,53 +18,58 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ProductController {
 
-    private final ProductService service;
+    // CHỈ KHAI BÁO 1 biến service và dùng nó ở mọi chỗ
+    private final ProductService productService;
 
     // ============ READ (ai cũng xem) ============
     @GetMapping
-    public List<ProductDto> getAll() {
-        return service.getAllProducts();
+    public ResponseEntity<List<ProductDto>> getAll(
+            @RequestParam(required = false) String brand) {
+        if (brand != null && !brand.isBlank()) {
+            return ResponseEntity.ok(productService.getProductsByBrandSlug(brand));
+        }
+        return ResponseEntity.ok(productService.getAllProducts());
     }
 
     @GetMapping("/{id}")
     public ProductDto getById(@PathVariable Integer id) {
-        return service.getProductById(id);
+        return productService.getProductById(id);
     }
 
     @GetMapping("/search")
     public List<ProductDto> searchByName(@RequestParam String keyword) {
-        return service.searchByName(keyword);
+        return productService.searchByName(keyword);
     }
 
     @GetMapping("/search/price")
     public List<ProductDto> searchByPrice(@RequestParam Double min, @RequestParam Double max) {
-        return service.searchByPriceRange(min, max);
+        return productService.searchByPriceRange(min, max);
     }
 
     @GetMapping("/search/quantity")
     public List<ProductDto> searchByQuantity(@RequestParam Integer q) {
-        return service.searchByQuantityGreaterThan(q);
+        return productService.searchByQuantityGreaterThan(q);
     }
 
     // ============ WRITE (ADMIN) ============
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse> create(@RequestBody ProductDto dto) {
-        service.addProduct(dto);
+        productService.addProduct(dto);
         return new ResponseEntity<>(new ApiResponse("Thêm sản phẩm thành công!"), HttpStatus.CREATED);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> update(@PathVariable Integer id, @RequestBody ProductDto dto) {
-        service.updateProduct(id, dto);
+        productService.updateProduct(id, dto);
         return ResponseEntity.ok(new ApiResponse("Cập nhật sản phẩm với ID " + id + " thành công!"));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse> delete(@PathVariable Integer id) {
-        service.deleteProduct(id);
+        productService.deleteProduct(id);
         return ResponseEntity.ok(new ApiResponse("Đã xóa thành công sản phẩm có ID " + id));
     }
 }

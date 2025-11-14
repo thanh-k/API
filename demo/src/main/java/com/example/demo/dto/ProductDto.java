@@ -19,4 +19,9 @@ public class ProductDto {
     private Integer categoryId; // Thêm trường này để nhận id của category khi tạo/cập nhật product
     private String categoryName; // Thêm trường này để hiển thị tên category
 
+    //để chứa brand info
+    private Integer brandId;
+    private String brandName;
+    private String brandSlug;
+
 }
