@@ -67,4 +67,34 @@ public class FileController {
         .cacheControl(CacheControl.noCache())
         .body(resource);
   }
+
+  // Fallback: GET /files/{filename} (không có ngày)
+@GetMapping("/{filename:.+}")
+public ResponseEntity<Resource> serveNoDate(@PathVariable String filename) throws MalformedURLException {
+    // Lấy file trong tất cả thư mục con
+    try {
+        Path found = Files.find(
+                uploadRoot,
+                Integer.MAX_VALUE,
+                (path, attr) -> path.getFileName().toString().equals(filename)
+        ).findFirst().orElse(null);
+
+        if (found == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new UrlResource(found.toUri());
+        MediaType type = MediaType.APPLICATION_OCTET_STREAM;
+
+        String guess = Files.probeContentType(found);
+        if (guess != null) {
+            type = MediaType.parseMediaType(guess);
+        }
+
+        return ResponseEntity.ok().contentType(type).body(resource);
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError().build();
+    }
+}
+
 }
