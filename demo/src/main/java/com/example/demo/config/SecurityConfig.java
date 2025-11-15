@@ -84,6 +84,7 @@ public class SecurityConfig {
 
                 // Khu admin
                 .requestMatchers("/admin/**", "/api/admin/**").hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers(HttpMethod.POST, "/products/*/reviews").hasRole("USER")
 
                 // Còn lại
                 .anyRequest().authenticated()
