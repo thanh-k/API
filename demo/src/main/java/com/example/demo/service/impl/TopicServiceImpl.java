@@ -6,9 +6,9 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.mapper.TopicMapper;
 import com.example.demo.repository.TopicRepository;
 import com.example.demo.service.TopicService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import jakarta.transaction.Transactional;
 
 import java.text.Normalizer;
 import java.util.List;
@@ -24,7 +24,8 @@ public class TopicServiceImpl implements TopicService {
 
     @Override
     public TopicDto createTopic(TopicDto dto) {
-        // tạo slug nếu không có
+
+        // Tạo slug nếu không có
         if (dto.getSlug() == null || dto.getSlug().isBlank()) {
             dto.setSlug(generateSlug(dto.getName()));
             String base = dto.getSlug();
@@ -33,6 +34,7 @@ public class TopicServiceImpl implements TopicService {
                 dto.setSlug(base + "-" + i++);
             }
         } else {
+            // Nếu client truyền slug lên thì kiểm tra trùng
             if (topicRepository.existsBySlug(dto.getSlug())) {
                 throw new IllegalArgumentException("Slug đã tồn tại");
             }
@@ -49,13 +51,15 @@ public class TopicServiceImpl implements TopicService {
                 .orElseThrow(() -> new ResourceNotFoundException("Topic not found with id: " + id));
 
         existing.setName(dto.getName());
-        // nếu có slug truyền lên và khác slug cũ -> kiểm tra trùng
+
+        // Nếu có slug truyền lên và khác slug cũ -> kiểm tra trùng rồi cập nhật
         if (dto.getSlug() != null && !dto.getSlug().isBlank() && !dto.getSlug().equals(existing.getSlug())) {
             if (topicRepository.existsBySlug(dto.getSlug())) {
                 throw new IllegalArgumentException("Slug đã tồn tại");
             }
             existing.setSlug(dto.getSlug());
         }
+
         Topic updated = topicRepository.save(existing);
         return TopicMapper.toDto(updated);
     }
@@ -84,7 +88,8 @@ public class TopicServiceImpl implements TopicService {
 
     @Override
     public List<TopicDto> getAllTopics() {
-        return topicRepository.findAll().stream()
+        return topicRepository.findAll()
+                .stream()
                 .map(TopicMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -92,10 +97,15 @@ public class TopicServiceImpl implements TopicService {
     // helper: tạo slug đơn giản (loại dấu, khoảng trắng -> '-')
     private String generateSlug(String input) {
         if (input == null) return null;
-        String nowhitespace = input.trim().replaceAll("\\s+", "-").toLowerCase(Locale.ROOT);
+
+        String nowhitespace = input.trim()
+                .replaceAll("\\s+", "-")
+                .toLowerCase(Locale.ROOT);
+
         String normalized = Normalizer.normalize(nowhitespace, Normalizer.Form.NFD);
-        normalized = normalized.replaceAll("\\p{M}", "");
-        normalized = normalized.replaceAll("[^a-z0-9\\-]", "");
+        normalized = normalized.replaceAll("\\p{M}", ""); // bỏ dấu
+        normalized = normalized.replaceAll("[^a-z0-9\\-]", ""); // chỉ giữ a-z, 0-9, -
+
         return normalized;
     }
 }

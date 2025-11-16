@@ -5,6 +5,7 @@ import com.example.demo.dto.PostFormDto;
 import com.example.demo.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,11 +45,13 @@ public class PostController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<PostDto> update(@PathVariable Integer id, @RequestBody PostDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Integer id) {
         service.delete(id);

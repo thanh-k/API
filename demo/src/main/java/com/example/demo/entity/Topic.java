@@ -17,6 +17,6 @@ public class Topic {
 
     private String name;
 
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String slug;
 }
